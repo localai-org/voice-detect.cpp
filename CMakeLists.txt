@@ -16,6 +16,16 @@ option(VOICEDETECT_GGML_METAL  "Forward GGML_METAL" OFF)
 option(VOICEDETECT_GGML_VULKAN "Forward GGML_VULKAN" OFF)
 option(VOICEDETECT_GGML_HIP    "Forward GGML_HIP (ROCm)" OFF)
 
+set(VOICEDETECT_TOP_LEVEL OFF)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(VOICEDETECT_TOP_LEVEL ON)
+endif()
+option(VOICEDETECT_EXTERNAL_DR_WAV "Use the embedding project's dr_wav implementation" OFF)
+
+# An embedding host owns its ggml configuration; everything up to the ggml
+# add_subdirectory below only applies to a top-level build.
+if(VOICEDETECT_TOP_LEVEL)
+
 # Multi-ISA CPU backend with RUNTIME dispatch. ggml can build one CPU backend
 # per x86 micro-arch (sse42/sandybridge/haswell/skylakex/icelake/zen4/...) as
 # dlopen'd modules and pick the best one the host actually supports AT LOAD TIME.
@@ -130,7 +140,11 @@ if(BASH_EXECUTABLE AND EXISTS "${CMAKE_SOURCE_DIR}/scripts/apply_ggml_patches.sh
   endif()
 endif()
 
-add_subdirectory(third_party/ggml)
+endif() # VOICEDETECT_TOP_LEVEL
+
+if(NOT TARGET ggml)
+  add_subdirectory(third_party/ggml)
+endif()
 
 set(VOICEDETECT_SRC
     src/voicedetect.cpp
@@ -159,9 +173,12 @@ if(VOICEDETECT_SHARED)
 else()
   add_library(voicedetect STATIC ${VOICEDETECT_SRC})
 endif()
-target_include_directories(voicedetect PUBLIC include PRIVATE src ${CMAKE_SOURCE_DIR}/third_party)
+target_include_directories(voicedetect PUBLIC include PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 target_compile_definitions(voicedetect PUBLIC $<$<CXX_COMPILER_ID:MSVC>:_USE_MATH_DEFINES>)
 target_link_libraries(voicedetect PUBLIC ggml)
+if(VOICEDETECT_EXTERNAL_DR_WAV)
+  target_compile_definitions(voicedetect PRIVATE VOICEDETECT_EXTERNAL_DR_WAV)
+endif()
 if(VOICEDETECT_GGML_CUDNN)
   target_compile_definitions(voicedetect PRIVATE VOICEDETECT_GGML_CUDNN)
 endif()
@@ -218,10 +235,10 @@ if(VOICEDETECT_HAS_AVX2)
   endif()
 endif()
 
-if(VOICEDETECT_BUILD_CLI)
+if(VOICEDETECT_BUILD_CLI AND VOICEDETECT_TOP_LEVEL)
   add_subdirectory(examples/cli)
 endif()
-if(VOICEDETECT_BUILD_TESTS)
+if(VOICEDETECT_BUILD_TESTS AND VOICEDETECT_TOP_LEVEL)
   enable_testing()
   add_subdirectory(tests)
 endif()
