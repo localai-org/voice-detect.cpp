@@ -88,6 +88,11 @@ int voicedetect_capi_verify_paths(voicedetect_ctx* ctx, const char* a,
 char* voicedetect_capi_analyze_path_json(voicedetect_ctx* ctx,
                                          const char* wav_path);
 
+// Size of the L2-normalized embedding this model produces (192 to 512), 0 for a
+// model with no speaker embedding (the age/gender/emotion analyze heads), -1 for
+// a NULL ctx. Additive: no ABI version bump.
+int voicedetect_capi_embedding_dim(voicedetect_ctx* ctx);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

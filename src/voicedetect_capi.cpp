@@ -62,6 +62,11 @@ extern "C" int voicedetect_capi_abi_version(void) {
     return VOICEDETECT_CAPI_ABI_VERSION;
 }
 
+extern "C" int voicedetect_capi_embedding_dim(voicedetect_ctx* ctx) {
+    if (!ctx || !ctx->model) return -1;
+    return ctx->model->embedding_dim();
+}
+
 extern "C" voicedetect_ctx* voicedetect_capi_load(const char* gguf_path) {
     if (!gguf_path) return nullptr;
     try {
