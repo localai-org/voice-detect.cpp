@@ -16,6 +16,8 @@ vd_add_test(test_analyze)
 vd_add_test(test_age_gender)
 vd_add_test(test_blocked)
 vd_add_test(test_cache_safety)
+vd_add_test(test_load_memory)
+vd_add_test(test_load_memory_embed)
 
 # Manual benchmark target (not registered as a ctest; run directly).
 add_executable(bench_wespeaker bench_wespeaker.cpp)
@@ -28,7 +30,7 @@ target_include_directories(bench_eres2net PRIVATE ${PROJECT_SOURCE_DIR}/src ${PR
 
 # Model/baseline-dependent tests read fixtures/baselines via paths relative to
 # the project root, and skip (exit 77) when the baseline env var is unset.
-set_tests_properties(test_fbank test_encoder test_embed test_verify test_analyze test_age_gender test_cache_safety PROPERTIES
+set_tests_properties(test_fbank test_encoder test_embed test_verify test_analyze test_age_gender test_cache_safety test_load_memory_embed PROPERTIES
                      LABELS "model"
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 

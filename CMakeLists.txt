@@ -149,6 +149,7 @@ endif()
 set(VOICEDETECT_SRC
     src/voicedetect.cpp
     src/voicedetect_capi.cpp
+    src/gguf_check.cpp
     src/model.cpp
     src/model_loader.cpp
     src/backend.cpp

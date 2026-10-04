@@ -11,6 +11,7 @@ typedef struct ggml_backend_buffer* ggml_backend_buffer_t;
 struct ggml_backend;
 typedef struct ggml_backend* ggml_backend_t;
 namespace vd {
+struct Kv;
 
 // Metadata-driven config for a speaker-recognition GGUF. All values live in GGUF
 // KV under the `voicedetect.*` prefix; tensor names are kept VERBATIM from the
@@ -149,6 +150,19 @@ public:
     // Load a GGUF. Returns false if the file is absent/unreadable or required
     // KV is missing - tolerant of a not-yet-existing file (no throw, no abort).
     bool load(const std::string& path);
+    // Load from a GGUF held in memory (no file, no temporary file). The tensor
+    // data is copied into loader-owned memory during the call, so the caller may
+    // free or reuse `data` as soon as it returns. Peak memory is the buffer plus
+    // the model. Returns false (see error()) on a NULL/empty, truncated or
+    // corrupt buffer; never reads outside [data, data+size).
+    bool load_from_memory(const void* data, size_t size);
+    // As above for a model stored inside a larger GGUF (a bundle): every key and
+    // tensor name of the model is stored as `prefix` + name (for example
+    // "voice."). Only the tensors under the prefix are copied. Names inside
+    // metadata manifests are NOT prefixed and are used as they are.
+    bool load_from_memory(const void* data, size_t size, const std::string& prefix);
+    // Reason for the last failed load; "" after a successful one.
+    const std::string& error() const { return error_; }
     const VoiceDetectConfig& config() const { return cfg_; }
     ggml_tensor* tensor(const std::string& name) const; // nullptr if absent
     ggml_context* ggml_ctx() const { return ctx_; }
@@ -161,6 +175,10 @@ public:
     bool realize_weights(ggml_backend_t backend);
     bool weights_realized() const { return weights_buf_ != nullptr; }
 private:
+    bool finish_(const Kv& kv, bool ctx_names = false);
+    bool fail_(const std::string& msg);
+    void reset_();
+    std::string error_;
     VoiceDetectConfig cfg_;
     gguf_context* gguf_ = nullptr;
     ggml_context* ctx_ = nullptr;
