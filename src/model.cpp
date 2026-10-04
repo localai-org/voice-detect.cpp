@@ -11,10 +11,30 @@
 
 namespace vd {
 
-std::unique_ptr<Model> Model::load(const std::string& gguf_path) {
+std::unique_ptr<Model> Model::load(const std::string& gguf_path, std::string* err) {
     auto m = std::unique_ptr<Model>(new Model());
     if (!m->loader_.load(gguf_path)) {
+        if (err) *err = m->loader_.error();
         return nullptr;  // bad/missing GGUF, or required KV absent
+    }
+    return m;
+}
+
+std::unique_ptr<Model> Model::load_from_memory(const void* data, size_t size, std::string* err) {
+    auto m = std::unique_ptr<Model>(new Model());
+    if (!m->loader_.load_from_memory(data, size)) {
+        if (err) *err = m->loader_.error();
+        return nullptr;
+    }
+    return m;
+}
+
+std::unique_ptr<Model> Model::load_from_memory(const void* data, size_t size,
+                                               const std::string& prefix, std::string* err) {
+    auto m = std::unique_ptr<Model>(new Model());
+    if (!m->loader_.load_from_memory(data, size, prefix)) {
+        if (err) *err = m->loader_.error();
+        return nullptr;
     }
     return m;
 }

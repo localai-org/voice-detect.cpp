@@ -25,6 +25,21 @@ struct voicedetect_ctx {
 
 namespace {
 
+// Load-time failures have no context to attach to yet.
+thread_local std::string g_load_error;
+
+voicedetect_ctx* wrap_model(std::unique_ptr<vd::Model> model, const std::string& err) {
+    if (!model) {
+        g_load_error = err.empty() ? "failed to load model" : err;
+        return nullptr;
+    }
+    auto* ctx = new (std::nothrow) voicedetect_ctx();
+    if (!ctx) { g_load_error = "out of memory"; return nullptr; }
+    ctx->model = std::move(model);
+    g_load_error.clear();
+    return ctx;
+}
+
 // malloc a copy of `s` (NUL-terminated) so a C consumer frees it with free()
 // (matching voicedetect_capi_free_string). Returns NULL on OOM.
 char* dup_to_c(const std::string& s) {
@@ -68,18 +83,53 @@ extern "C" int voicedetect_capi_embedding_dim(voicedetect_ctx* ctx) {
 }
 
 extern "C" voicedetect_ctx* voicedetect_capi_load(const char* gguf_path) {
-    if (!gguf_path) return nullptr;
+    if (!gguf_path) { g_load_error = "model path is NULL"; return nullptr; }
     try {
-        std::unique_ptr<vd::Model> model = vd::Model::load(gguf_path);
-        if (!model) return nullptr;  // load failure (bad/missing GGUF)
-        auto* ctx = new (std::nothrow) voicedetect_ctx();
-        if (!ctx) return nullptr;
-        ctx->model = std::move(model);
-        return ctx;
+        std::string err;
+        std::unique_ptr<vd::Model> model = vd::Model::load(gguf_path, &err);
+        return wrap_model(std::move(model), err);
+    } catch (const std::exception& e) {
+        g_load_error = e.what();
+        return nullptr;
     } catch (...) {
         // Never let an exception cross the boundary.
+        g_load_error = "unknown error";
         return nullptr;
     }
+}
+
+extern "C" voicedetect_ctx* voicedetect_capi_load_from_memory(const void* data, size_t size) {
+    try {
+        std::string err;
+        std::unique_ptr<vd::Model> model = vd::Model::load_from_memory(data, size, &err);
+        return wrap_model(std::move(model), err);
+    } catch (const std::exception& e) {
+        g_load_error = e.what();
+        return nullptr;
+    } catch (...) {
+        g_load_error = "unknown error";
+        return nullptr;
+    }
+}
+
+extern "C" voicedetect_ctx* voicedetect_capi_load_from_memory_prefixed(const void* data, size_t size,
+                                                                        const char* prefix) {
+    try {
+        std::string err;
+        std::unique_ptr<vd::Model> model =
+            vd::Model::load_from_memory(data, size, prefix ? prefix : "", &err);
+        return wrap_model(std::move(model), err);
+    } catch (const std::exception& e) {
+        g_load_error = e.what();
+        return nullptr;
+    } catch (...) {
+        g_load_error = "unknown error";
+        return nullptr;
+    }
+}
+
+extern "C" const char* voicedetect_capi_last_load_error(void) {
+    return g_load_error.c_str();
 }
 
 extern "C" void voicedetect_capi_free(voicedetect_ctx* ctx) {

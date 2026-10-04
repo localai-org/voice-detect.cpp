@@ -188,6 +188,7 @@ The frozen symbol set:
 
 - `voicedetect_capi_abi_version` - integer LocalAI checks for compatibility; bump it on any breaking change to the frozen symbols (additive functions do not require a bump).
 - `voicedetect_capi_load` / `voicedetect_capi_free` - load a GGUF model, free the context.
+- `voicedetect_capi_load_from_memory` / `voicedetect_capi_load_from_memory_prefixed` / `voicedetect_capi_last_load_error` - load a model from a buffer instead of a path, and read why a load failed (see "Loading from memory" below).
 - `voicedetect_capi_last_error` - human-readable last error on a context.
 - `voicedetect_capi_embed_path` / `voicedetect_capi_embed_pcm` - L2-normalized embedding from a WAV file or in-memory mono float PCM (PCM is linearly resampled to 16 kHz if needed).
 - `voicedetect_capi_verify_paths` - cosine distance (`1 - cosine_similarity`) between two clips plus a same-speaker verdict against a threshold.
@@ -218,6 +219,25 @@ if (json) { voicedetect_capi_free_string(json); }
 voicedetect_capi_free(ctx);
 ```
 
+### Loading from memory
+
+A model can be loaded from a GGUF that is already in memory, with no file path and no temporary file. The same code runs on Linux, macOS and Windows.
+
+```c
+voicedetect_ctx* ctx = voicedetect_capi_load_from_memory(bytes, n_bytes);
+if (!ctx) fprintf(stderr, "%s\n", voicedetect_capi_last_load_error());
+free(bytes);   // allowed: the loader has already copied what it needs
+```
+
+- **Ownership.** The loader copies the tensor data into its own memory during the call. `data` is only read inside the call, so you may free or overwrite it as soon as the function returns, whether it succeeded or not. While the call runs, the buffer and the model are in memory together.
+- **Errors.** A NULL or empty buffer, a truncated buffer, and a corrupt buffer all return `NULL`. `voicedetect_capi_last_load_error()` returns the reason for the last failed load on the calling thread. No byte outside `[data, data + size)` is read. The same function also reports path-load errors. (`voicedetect_capi_load` used to return `NULL` without a reason.)
+- **Threads.** Loads are independent. Different threads may load at the same time, from different buffers or from the same read-only buffer. A context is used by one thread at a time, as before.
+- **C++.** `vd::Model::load_from_memory(data, size, &err)` and `vd::ModelLoader::load_from_memory(data, size)`. `vd::Model::load(path, &err)` gained the same optional error out-parameter.
+
+**Models inside a larger GGUF (bundles).** A GGUF can hold several models if every key and every tensor name of a model carries a prefix, for example `voice.`. `voicedetect_capi_load_from_memory_prefixed(data, size, "voice.")` reads such a component straight from the whole bundle. Only the tensors under the prefix are copied, so the caller does not need to build a standalone copy of the component first. Tensor names that are stored as string values in the model's metadata (the block manifests) are not prefixed: the loader uses them as they are. A prefix that matches no tensor is an error. An empty prefix behaves like `voicedetect_capi_load_from_memory`.
+
+Limits: the buffer must hold the complete GGUF (the loader does not stream). The tensors are copied once, so the peak memory is the buffer plus the model.
+
 ---
 
 ## Model coverage
@@ -242,6 +262,8 @@ export VOICEDETECT_TEST_BASELINE=/tmp/baseline.gguf
 export VOICEDETECT_TEST_AUDIO=tests/fixtures/clip.wav
 ctest --test-dir build --output-on-failure
 ```
+
+`test_load_memory` is model-independent: it builds GGUF files and bundles in memory and checks equivalence, truncated and corrupt buffers, and concurrent loads. `test_load_memory_embed` needs `VOICEDETECT_TEST_GGUF` and `VOICEDETECT_TEST_AUDIO` and checks that path, memory and prefixed loads give bitwise-identical embeddings.
 
 Tests labelled `model` return exit code 77 (ctest SKIP) when their required env vars or checkpoints are absent, so they never break a CI environment that has no model. `scripts/gpu_verify.sh` runs the parity gates plus the benchmark on a CUDA host (GPU only, not CI).
 

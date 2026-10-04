@@ -18,7 +18,23 @@ namespace vd {
 class Model {
 public:
     // Loads the GGUF at `gguf_path`. Returns nullptr on failure (no throw).
-    static std::unique_ptr<Model> load(const std::string& gguf_path);
+    // On failure `*err` (if given) receives the reason.
+    static std::unique_ptr<Model> load(const std::string& gguf_path, std::string* err = nullptr);
+
+    // Loads a GGUF held in memory. The tensor data is copied during the call:
+    // `data` may be freed or overwritten as soon as this returns. Returns nullptr
+    // on a NULL/empty, truncated or corrupt buffer (reason in `*err`, no throw,
+    // no read outside [data, data+size)). Safe to call from several threads on
+    // different buffers (or the same read-only buffer).
+    static std::unique_ptr<Model> load_from_memory(const void* data, size_t size,
+                                                   std::string* err = nullptr);
+
+    // As load_from_memory for a model stored inside a larger GGUF (a bundle):
+    // every key and tensor name of the model carries `prefix` (for example
+    // "voice."). Only the tensors under the prefix are copied.
+    static std::unique_ptr<Model> load_from_memory(const void* data, size_t size,
+                                                   const std::string& prefix,
+                                                   std::string* err = nullptr);
 
     // Compute the L2-normalized speaker embedding from raw mono float PCM. If
     // `sample_rate != 16000` the audio is linearly resampled to 16 kHz first.

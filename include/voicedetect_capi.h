@@ -1,6 +1,8 @@
 #ifndef VOICEDETECT_CAPI_H
 #define VOICEDETECT_CAPI_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,8 +25,8 @@ extern "C" {
 typedef struct voicedetect_ctx voicedetect_ctx;
 
 // ABI version of this header/implementation. Bump on any breaking change to the
-// function signatures or semantics below. Additive changes (new functions) are
-// fine without a bump; LocalAI checks this integer for compatibility.
+// function signatures or semantics below. Additive changes (new functions, such
+// as the load_from_memory family) are fine without a bump; LocalAI checks this integer for compatibility.
 //
 // v1: initial flat C-API surface - load/free/last_error/free_string,
 //     embed_path / embed_pcm (+ free_vec), verify_paths, analyze_path_json.
@@ -34,6 +36,37 @@ int voicedetect_capi_abi_version(void);
 // failure (bad/missing GGUF). The returned context must be released with
 // voicedetect_capi_free.
 voicedetect_ctx* voicedetect_capi_load(const char* gguf_path);
+
+// Load a model from a GGUF held in memory (no file, no temporary file, no file
+// descriptor; works the same on every platform). `data` points to the complete
+// GGUF file of `size` bytes.
+//
+// OWNERSHIP: the loader copies the tensor data into its own memory during the
+// call. `data` is only read inside the call: the caller may free or overwrite it
+// as soon as the function returns, on success and on failure. While loading, the
+// buffer and the model are in memory together (peak = buffer + model).
+//
+// A NULL or empty buffer, a truncated buffer or a corrupt buffer gives NULL and
+// a message in voicedetect_capi_last_load_error(); no byte outside
+// [data, data+size) is read. Returns an owning context, released with
+// voicedetect_capi_free. Calls on different threads are independent.
+voicedetect_ctx* voicedetect_capi_load_from_memory(const void* data, size_t size);
+
+// As voicedetect_capi_load_from_memory, for a model that is one component of a
+// larger GGUF (a bundle): every metadata key and every tensor name of the model
+// is stored as `prefix` + name (for example "voice."). Pass the whole bundle and
+// the prefix: no standalone copy of the component is needed, and only the
+// tensors under the prefix are copied. Names stored as string values inside the
+// model's metadata (tensor manifests) are not prefixed. Same ownership and error
+// rules as above. A prefix that matches no tensor is an error. A NULL or empty
+// `prefix` behaves like voicedetect_capi_load_from_memory.
+voicedetect_ctx* voicedetect_capi_load_from_memory_prefixed(const void* data, size_t size,
+                                                            const char* prefix);
+
+// Reason for the last failed voicedetect_capi_load* call made on the CALLING
+// THREAD, or "" if the last such call succeeded. The pointer stays valid until
+// the next load call on the same thread. Never NULL.
+const char* voicedetect_capi_last_load_error(void);
 
 // Free a context obtained from voicedetect_capi_load. Safe on NULL.
 void voicedetect_capi_free(voicedetect_ctx* ctx);
