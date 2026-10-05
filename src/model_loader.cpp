@@ -52,6 +52,14 @@ static bool kv_bool(const Kv& kv, const char* k, bool d=false){
 static std::string kv_str(const Kv& kv, const char* k, const char* d=""){
     int64_t id = kv.find(k, GGUF_TYPE_STRING); return id<0 ? std::string(d) : std::string(gguf_get_val_str(kv.g,id));
 }
+// A string key that is absent or of another type reads as "". Unlike kv_str it
+// never records a load error: the identity keys are descriptive, and a model
+// that loaded before must still load.
+static std::string kv_str_soft(const Kv& kv, const char* k){
+    int64_t id = gguf_find_key(kv.g, (kv.prefix + k).c_str());
+    if(id < 0 || gguf_get_kv_type(kv.g, id) != GGUF_TYPE_STRING) return std::string();
+    return std::string(gguf_get_val_str(kv.g, id));
+}
 static std::vector<std::string> kv_str_arr(const Kv& kv, const char* k){
     std::vector<std::string> out;
     int64_t id = kv.find_arr(k, GGUF_TYPE_STRING);
@@ -235,6 +243,16 @@ bool ModelLoader::finish_(const Kv& kv, bool ctx_names){
     cfg_.arch          = kv_str(kv, "voicedetect.arch");
     cfg_.embedding_dim = kv_u32(kv, "voicedetect.embedding_dim");
     cfg_.l2_normalize  = kv_bool(kv, "voicedetect.l2_normalize", true);
+    // Encoder identity (see VoiceDetectConfig::family). Keys come from the same
+    // prefix as every other key, so a bundle component and the standalone file
+    // it was made from give the same string.
+    cfg_.name = kv_str_soft(kv, "general.name");
+    if(kv_str_soft(kv, "general.architecture") == "voicedetect"){
+        cfg_.family = "voicedetect:" + kv_str_soft(kv, "voicedetect.arch") + ":" + cfg_.name + ":" +
+                      (cfg_.embedding_dim > 0 ? std::to_string(cfg_.embedding_dim) : std::string());
+    } else {
+        cfg_.family.clear();
+    }
     // FBank front end
     cfg_.sample_rate   = kv_u32(kv, "voicedetect.fbank.sample_rate", 16000);
     cfg_.n_mels        = kv_u32(kv, "voicedetect.fbank.n_mels", 80);

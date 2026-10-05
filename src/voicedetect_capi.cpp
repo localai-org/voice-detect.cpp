@@ -82,6 +82,21 @@ extern "C" int voicedetect_capi_embedding_dim(voicedetect_ctx* ctx) {
     return ctx->model->embedding_dim();
 }
 
+extern "C" const char* voicedetect_capi_encoder_arch(const voicedetect_ctx* ctx) {
+    if (!ctx || !ctx->model) return nullptr;
+    return ctx->model->config().arch.c_str();
+}
+
+extern "C" const char* voicedetect_capi_encoder_name(const voicedetect_ctx* ctx) {
+    if (!ctx || !ctx->model) return nullptr;
+    return ctx->model->config().name.c_str();
+}
+
+extern "C" const char* voicedetect_capi_encoder_family(const voicedetect_ctx* ctx) {
+    if (!ctx || !ctx->model) return nullptr;
+    return ctx->model->config().family.c_str();
+}
+
 extern "C" voicedetect_ctx* voicedetect_capi_load(const char* gguf_path) {
     if (!gguf_path) { g_load_error = "model path is NULL"; return nullptr; }
     try {

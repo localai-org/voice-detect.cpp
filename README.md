@@ -189,6 +189,7 @@ The frozen symbol set:
 - `voicedetect_capi_abi_version` - integer LocalAI checks for compatibility; bump it on any breaking change to the frozen symbols (additive functions do not require a bump).
 - `voicedetect_capi_load` / `voicedetect_capi_free` - load a GGUF model, free the context.
 - `voicedetect_capi_load_from_memory` / `voicedetect_capi_load_from_memory_prefixed` / `voicedetect_capi_last_load_error` - load a model from a buffer instead of a path, and read why a load failed (see "Loading from memory" below).
+- `voicedetect_capi_encoder_arch` / `voicedetect_capi_encoder_name` / `voicedetect_capi_encoder_family` - which encoder is loaded, and a string that names its embedding space (see "Encoder identity" below).
 - `voicedetect_capi_last_error` - human-readable last error on a context.
 - `voicedetect_capi_embed_path` / `voicedetect_capi_embed_pcm` - L2-normalized embedding from a WAV file or in-memory mono float PCM (PCM is linearly resampled to 16 kHz if needed).
 - `voicedetect_capi_verify_paths` - cosine distance (`1 - cosine_similarity`) between two clips plus a same-speaker verdict against a threshold.
@@ -237,6 +238,29 @@ free(bytes);   // allowed: the loader has already copied what it needs
 **Models inside a larger GGUF (bundles).** A GGUF can hold several models if every key and every tensor name of a model carries a prefix, for example `voice.`. `voicedetect_capi_load_from_memory_prefixed(data, size, "voice.")` reads such a component straight from the whole bundle. Only the tensors under the prefix are copied, so the caller does not need to build a standalone copy of the component first. Tensor names that are stored as string values in the model's metadata (the block manifests) are not prefixed: the loader uses them as they are. A prefix that matches no tensor is an error. An empty prefix behaves like `voicedetect_capi_load_from_memory`.
 
 Limits: the buffer must hold the complete GGUF (the loader does not stream). The tensors are copied once, so the peak memory is the buffer plus the model.
+
+### Encoder identity
+
+Two encoders can give embeddings of the same size and still not share an embedding space: ECAPA-TDNN and CAM++ both give 192 values. A store of enrolled voices (a speaker registry) must therefore record which encoder made its embeddings and refuse embeddings from another one. Three accessors report what the loader already read from the GGUF header:
+
+```c
+const char* voicedetect_capi_encoder_arch(const voicedetect_ctx*);    // voicedetect.arch, e.g. "ecapa_tdnn"
+const char* voicedetect_capi_encoder_name(const voicedetect_ctx*);    // general.name
+const char* voicedetect_capi_encoder_family(const voicedetect_ctx*);  // see below
+```
+
+The family string has exactly this format:
+
+```
+voicedetect:<voicedetect.arch>:<general.name>:<voicedetect.embedding_dim>
+```
+
+For example `voicedetect:ecapa_tdnn:speechbrain/spkrec-ecapa-voxceleb:192`. The values are copied as they are, with no escaping. A missing key gives an empty field and the colons stay. The size is in decimal and is empty when it is 0 (an analyze model). The string is empty when `general.architecture` is not `voicedetect`. It names the embedding space, so another quantization of the same encoder has the same family.
+
+- The pointers belong to the context, never change, and stay valid until `voicedetect_capi_free`. Do not free them. They are NULL for a NULL context. They can be read from several threads at once.
+- They work for a context from every load function. A model loaded with a prefix reads the prefixed keys, so a component of a bundle gives the same family as the standalone file it was made from.
+- [parakeet.cpp](https://github.com/mudler/parakeet.cpp) defines the encoder fingerprint of its speaker registry with the same formula (`speaker_encoder_family`). The two definitions must stay identical: change neither without the other.
+- This is an additive change: the ABI version stays 1. C++ code can read `vd::Model::config().arch`, `.name` and `.family`.
 
 ---
 
