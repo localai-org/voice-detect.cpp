@@ -23,6 +23,13 @@ struct VoiceDetectConfig {
     //   "eres2net"            3D-Speaker ERes2Net (ONNX-direct)
     //   "campplus"            3D-Speaker CAM++ (ONNX-direct)
     std::string arch;
+    // `general.name` of the GGUF ("" if absent or not a string).
+    std::string name;
+    // Encoder family string "voicedetect:<arch>:<name>:<embedding_dim>" (the
+    // embedding_dim is empty when it is 0), or "" when `general.architecture`
+    // is not "voicedetect". parakeet.cpp defines the same string for its
+    // speaker registry (speaker_encoder_family); the two must stay identical.
+    std::string family;
     // Embedding head
     uint32_t embedding_dim = 0;     // 192 for ECAPA-TDNN; 256 for WeSpeaker/CAM++
     bool     l2_normalize  = true;  // L2-normalize the output embedding (cosine space)

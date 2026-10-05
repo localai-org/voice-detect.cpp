@@ -126,6 +126,42 @@ char* voicedetect_capi_analyze_path_json(voicedetect_ctx* ctx,
 // a NULL ctx. Additive: no ABI version bump.
 int voicedetect_capi_embedding_dim(voicedetect_ctx* ctx);
 
+// Identity of the loaded encoder, read from the GGUF header the loader already
+// parsed. For a model loaded with a prefix the keys are the prefixed ones, so a
+// component of a bundle reports the same values as the standalone file it was
+// made from. All three work for every load path (path, memory, prefixed memory).
+// Each returns NULL for a NULL ctx. The returned pointer is owned by the context,
+// never changes, and stays valid until voicedetect_capi_free; do not free it.
+// Reading it from several threads at once is safe. Additive: no ABI version bump.
+//
+// voicedetect_capi_encoder_arch: the `voicedetect.arch` value, for example
+//   "ecapa_tdnn", "campplus", "wespeaker_resnet34", "eres2net". "" if the key
+//   is absent.
+const char* voicedetect_capi_encoder_arch(const voicedetect_ctx* ctx);
+
+// voicedetect_capi_encoder_name: the `general.name` value (the checkpoint the
+//   converter was run on, for example "speechbrain/spkrec-ecapa-voxceleb"). ""
+//   if the key is absent.
+const char* voicedetect_capi_encoder_name(const voicedetect_ctx* ctx);
+
+// voicedetect_capi_encoder_family: a string that names the embedding space, for
+//   a registry of voices to record next to its embeddings and compare before it
+//   matches a new embedding. Equal embedding sizes do not mean the same space
+//   (ECAPA-TDNN and CAM++ both give 192 values). The format is exactly
+//
+//     voicedetect:<voicedetect.arch>:<general.name>:<voicedetect.embedding_dim>
+//
+//   for example "voicedetect:ecapa_tdnn:speechbrain/spkrec-ecapa-voxceleb:192".
+//   A missing key gives an empty field (the colons stay), and no escaping is
+//   done: the values are copied as they are. The embedding_dim is written in
+//   decimal, and is an empty field when it is 0 (an analyze model). If
+//   `general.architecture` is not "voicedetect" the string is "" (not a
+//   voicedetect model). Another quantization of the same encoder has the same
+//   family. parakeet.cpp defines its speaker-registry encoder fingerprint with
+//   the same formula (speaker_encoder_family); the two MUST stay identical, so
+//   change neither without the other.
+const char* voicedetect_capi_encoder_family(const voicedetect_ctx* ctx);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
